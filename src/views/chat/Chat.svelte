@@ -212,7 +212,7 @@ function portalComposer(node: HTMLElement) {
 		publishGeometry();
 	};
 
-	// Slide the composer up with the keyboard instead of snapping. Obsidian
+	// Slide the composer with the keyboard instead of snapping. Obsidian
 	// flips `--keyboard-height` (inline on the root) in one step when the
 	// keyboard starts to open, which puts the composer at its final `top` at
 	// once while the keyboard is still rising. Core animates its own toolbar the
@@ -220,8 +220,53 @@ function portalComposer(node: HTMLElement) {
 	// travelled, then transition the offset away. The curve approximates the iOS
 	// keyboard's (fast start, long settle) rather than core's slow-start one,
 	// which let the rising keyboard cover the composer for the first frames.
-	// Closing still snaps: the keyboard slides away beneath it, which already
-	// reads as native.
+	// Closing slides the same way in reverse (a negative offset); snapping
+	// dropped the composer to the bottom while the keyboard was still leaving.
+	// While the composer has focus, hide Obsidian's formatting toolbar (and the
+	// spacer core reserves for it) so the composer sits right on the keyboard;
+	// the chat has its own attach button, and tapping the conversation still
+	// dismisses the keyboard since the message list takes focus. The band the
+	// layout rules reserve for the toolbar becomes `COMPOSING_BAND`: a 6px gap
+	// minus the 20px the composer keeps below its card (the glow spacer plus the
+	// flex gap), so that empty strip tucks behind the keyboard's edge instead of
+	// the card shifting when focus lands.
+	//
+	// On blur the toolbar must not come back before the keyboard has closed:
+	// focus leaves first, and restoring the band then made the composer jump up
+	// 44px before sliding down. So it's deferred to the moment
+	// `--keyboard-height` returns to 0 — unless focus moved to another editor
+	// (a note), which needs its toolbar at once.
+	const COMPOSING_CLASS = "s2b-composing";
+	const COMPOSING_BAND = -14;
+	let composingPending = false;
+	let composingCleanup: (() => void) | null = null;
+	const setComposing = (el: HTMLElement, on: boolean) => {
+		composingPending = false;
+		document.body.classList.toggle("s2b-chat-composing", on);
+		el.classList.toggle(COMPOSING_CLASS, on);
+		node.classList.toggle(COMPOSING_CLASS, on);
+	};
+	const onKeyboardClosed = () => {
+		if (composingPending && composer) setComposing(composer, false);
+	};
+	const watchComposing = (el: HTMLElement) => {
+		const onFocusIn = () => setComposing(el, true);
+		const onFocusOut = (event: FocusEvent) => {
+			const next = event.relatedTarget as HTMLElement | null;
+			if (next && el.contains(next)) return;
+			const toEditor = next?.isContentEditable || next?.closest("input, textarea, .cm-editor");
+			if (toEditor || readKeyboardHeight() === 0) setComposing(el, false);
+			else composingPending = true;
+		};
+		el.addEventListener("focusin", onFocusIn);
+		el.addEventListener("focusout", onFocusOut);
+		composingCleanup = () => {
+			el.removeEventListener("focusin", onFocusIn);
+			el.removeEventListener("focusout", onFocusOut);
+			setComposing(el, false);
+		};
+	};
+
 	const KEYBOARD_SLIDE = "transform 300ms cubic-bezier(0.38, 0.7, 0.125, 1)";
 	const readKeyboardHeight = () =>
 		Number.parseFloat(document.documentElement.style.getPropertyValue("--keyboard-height")) || 0;
@@ -233,8 +278,14 @@ function portalComposer(node: HTMLElement) {
 		document.body.appendChild(probe);
 		const safeBottom = Number.parseFloat(getComputedStyle(probe).paddingBottom) || 0;
 		probe.remove();
-		// The band below the composer, mirroring the `max()` in its `top` rule.
-		const band = (keyboard: number) => Math.max(keyboard + toolbarHeight, 52 + safeBottom);
+		// The band below the composer, mirroring the `max()` in its `top` rule —
+		// including the toolbar band being swapped for `COMPOSING_BAND` while the
+		// composer has focus (see `watchComposing`).
+		const band = (keyboard: number) =>
+			Math.max(
+				keyboard + (el.classList.contains(COMPOSING_CLASS) ? COMPOSING_BAND : toolbarHeight),
+				52 + safeBottom,
+			);
 		const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
 		let lastKeyboard = readKeyboardHeight();
@@ -243,7 +294,8 @@ function portalComposer(node: HTMLElement) {
 			if (keyboard === lastKeyboard) return;
 			const rise = band(keyboard) - band(lastKeyboard);
 			lastKeyboard = keyboard;
-			if (rise <= 0 || reducedMotion.matches || el.style.display === "none") return;
+			if (keyboard === 0) onKeyboardClosed();
+			if (rise === 0 || reducedMotion.matches || el.style.display === "none") return;
 			el.style.transition = "none";
 			el.style.transform = `translateY(${rise}px)`;
 			// Commit the offset now, in the keyboard's own task, so the slide
@@ -303,6 +355,7 @@ function portalComposer(node: HTMLElement) {
 		classObserver = new MutationObserver(ensurePortaledClass);
 		classObserver.observe(found, { attributes: true, attributeFilter: ["class"] });
 		watchKeyboard(found);
+		watchComposing(found);
 	};
 
 	// `<Input>` is rendered by a child component, so it may not exist yet when
@@ -330,6 +383,7 @@ function portalComposer(node: HTMLElement) {
 			classObserver?.disconnect();
 			treeObserver?.disconnect();
 			keyboardObserver?.disconnect();
+			composingCleanup?.();
 			if (!composer) return;
 			composer.style.display = "";
 			composer.style.transform = "";
@@ -591,6 +645,22 @@ function portalComposer(node: HTMLElement) {
           calc(52px + env(safe-area-inset-bottom))
         )
     );
+  }
+
+  /* See `watchComposing`: the toolbar and its reserved spacer are hidden while
+     the chat composer has focus, and every rule above that reserves the
+     toolbar's band (`--mobile-toolbar-height`) gets `COMPOSING_BAND` instead —
+     set on the composer and the chat root only, never the document root, whose
+     variable changes restyle the whole page. Keep the value in sync with
+     `COMPOSING_BAND`. */
+  :global(body.s2b-chat-composing .mobile-toolbar),
+  :global(body.s2b-chat-composing .mobile-toolbar-spacer) {
+    display: none;
+  }
+
+  :global(.is-mobile .chat-root.s2b-composing),
+  :global(.is-mobile .chat-input-container.s2b-composer-portaled.s2b-composing) {
+    --mobile-toolbar-height: -14px;
   }
 
   /* Anchor the absolute chat-root to the leaf's content area. `:has` is supported
