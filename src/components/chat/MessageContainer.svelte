@@ -550,6 +550,7 @@ $effect(() => {
     <div
       class="w-full max-w-[--file-line-width] mx-auto"
       class:min-h-full={messages && messages.length > 0}
+      class:s2b-chat-turns={messages && messages.length > 0}
       class:h-full={!messages || messages.length === 0}
     >
       {#if registry.isLoadingSession}
@@ -584,6 +585,7 @@ $effect(() => {
         </div>
       {:else}
         {#each messages as messagePair, index (messagePair.stableKey ?? messagePair.id)}
+          <div class="s2b-chat-turn">
           {#if messagePair.transcriptEvent?.type === "summarization_marker"}
             <div
               class="summary-marker-row flex justify-center my-4"
@@ -876,6 +878,7 @@ $effect(() => {
 
             </div>
           {/if}
+          </div>
         {/each}
       {/if}
     </div>
@@ -897,6 +900,31 @@ $effect(() => {
 </div>
 
 <style>
+  /* Skip style, layout and paint for turns scrolled out of view. Obsidian
+     mobile announces the keyboard by changing `--keyboard-height` on the root,
+     which restyles the whole document; in a long chat that single frame took
+     ~140ms on desktop (116k nodes) before the composer could move, ~7ms with
+     this. `auto` in the intrinsic size remembers each turn's real height once
+     it has rendered.
+
+     `content-visibility` also paint-contains: anything drawn outside the turn
+     is clipped. A turn wraps its user message and reply so the reply's header
+     (drawn 26px above its own block) stays inside, and a padding band cancelled
+     by an equal negative margin leaves room for outlines, shadows and the
+     footer icons without moving anything. The column is a flex column so the
+     turns' negative margins add up instead of collapsing into one another. */
+  .s2b-chat-turns {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .s2b-chat-turn {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 400px;
+    padding-block: 12px;
+    margin-block: -12px;
+  }
+
   /* Highlights the bubble anchored above the composer while it's being
      edited. `:global` because CollapsibleUserBubble renders its own root
      element from the `class` prop, outside this component's style scope.
