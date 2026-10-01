@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("obsidian", () => import("../__mocks__/obsidian"));
 
@@ -26,22 +26,22 @@ vi.mock("../../src/lib/secretStorage", () => ({
 	listSecrets: vi.fn(() => []),
 }));
 
+import { AGENT_PROMPT_VERSION, DEFAULT_AGENT_PROMPT } from "../../src/agent/prompts";
 import { DEFAULT_TOOLS_CONFIG } from "../../src/agent/tools/builtInToolDefaults";
+import { compilePrivacyMembershipDraft } from "../../src/lib/views";
 import { DEFAULT_AGENT_ID, createDefaultAgentConfig } from "../../src/stores/agentDefaults";
 import {
-	PluginDataStore,
-	DEFAULT_SETTINGS,
-	createData,
-	__resetPluginDataStoreForTests,
 	AddChatModelError,
 	AddEmbedModelError,
+	DEFAULT_SETTINGS,
+	PluginDataStore,
 	SetChatModelError,
 	SetEmbedModelError,
+	__resetPluginDataStoreForTests,
+	createData,
 } from "../../src/stores/dataStore.svelte";
-import { compilePrivacyMembershipDraft } from "../../src/lib/views";
 import type { StoredProviderState } from "../../src/stores/dataStore.svelte";
 import type { PromptFileReader, PromptFileSnapshot } from "../../src/types/plugin";
-import { AGENT_PROMPT_VERSION, DEFAULT_AGENT_PROMPT } from "../../src/agent/prompts";
 import { fingerprint, shippedVersion } from "../../src/utils/shippedDefaults";
 
 /* --------------------------------------------------------------------------
@@ -1110,5 +1110,12 @@ describe("PluginDataStore graph index availability", () => {
 		({ store } = makeStore({ graphEmbedIndex: "ollama:gone", embeddingIndexes: [] }));
 		expect(store.graphEmbedIndex).toBe("ollama:gone");
 		expect(store.getGraphEmbedModel()).toBeNull();
+	});
+
+	it("defaults autoWritingMode to false and allows toggling", () => {
+		const { store: localStore } = makeStore();
+		expect(localStore.autoWritingMode).toBe(false);
+		localStore.autoWritingMode = true;
+		expect(localStore.autoWritingMode).toBe(true);
 	});
 });

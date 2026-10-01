@@ -1,33 +1,33 @@
 <script lang="ts">
 import { Notice, Platform, TFile, normalizePath } from "obsidian";
-import { selectChatModelAction, showActionNotice } from "../../utils/actionNotice";
-import { isMarkdownListLineAt } from "../../utils/markdownList";
 import { onDestroy, onMount, untrack } from "svelte";
 import { useAvailableModels } from "../../hooks/useAvailableModels.svelte";
+import type { SelectionRef } from "../../hooks/useSelection.svelte";
+import type { VisibleNote, VisibleNoteRef } from "../../hooks/useVisibleNotes.svelte";
 import { EmbeddableMarkdownEditor } from "../../lib/editor";
 import { type SessionRegistry } from "../../stores/chatStore.svelte";
 import { MessageState } from "../../stores/chatTimeline";
-import { getPlugin } from "../../stores/state.svelte";
-import { icon } from "../../utils/utils";
-import { buildUsageEstimate, estimateContextUsageBreakdown } from "../../utils/tokenEstimator";
-import type { ChatAttachment } from "../../types/shared";
-import type { VisibleNote, VisibleNoteRef } from "../../hooks/useVisibleNotes.svelte";
-import type { SelectionRef } from "../../hooks/useSelection.svelte";
 import type { GraphNoteRef } from "../../stores/chatTimeline";
-import { mimeFromExtension } from "../../utils/attachments";
-import { renderPdfThumbnail } from "../../utils/pdfExtractor";
-import { extractObsidianDraggedPaths, hasObsidianFileDrag } from "../../utils/obsidianDrag";
 import { getData } from "../../stores/dataStore.svelte";
+import { getPlugin } from "../../stores/state.svelte";
+import type { ChatAttachment } from "../../types/shared";
+import { selectChatModelAction, showActionNotice } from "../../utils/actionNotice";
+import { mimeFromExtension } from "../../utils/attachments";
+import { isMarkdownListLineAt } from "../../utils/markdownList";
+import { extractObsidianDraggedPaths, hasObsidianFileDrag } from "../../utils/obsidianDrag";
+import { renderPdfThumbnail } from "../../utils/pdfExtractor";
+import { isMobileUI } from "../../utils/platform";
+import { buildUsageEstimate, estimateContextUsageBreakdown } from "../../utils/tokenEstimator";
+import { icon } from "../../utils/utils";
+import { SearchModal } from "../modal/SearchModal";
+import Button from "../ui/Button.svelte";
 import AgentPopover from "./AgentPopover.svelte";
-import ModelSelectButton from "./ModelSelectButton.svelte";
-import PendingChangesBar from "./PendingChangesBar.svelte";
-import EditingMessageBar from "./EditingMessageBar.svelte";
+import AttachPopover from "./AttachPopover.svelte";
 import ContextTray from "./ContextTray.svelte";
 import ContextUsageCircle from "./ContextUsageCircle.svelte";
-import AttachPopover from "./AttachPopover.svelte";
-import { SearchModal } from "../modal/SearchModal";
-import { isMobileUI } from "../../utils/platform";
-import Button from "../ui/Button.svelte";
+import EditingMessageBar from "./EditingMessageBar.svelte";
+import ModelSelectButton from "./ModelSelectButton.svelte";
+import PendingChangesBar from "./PendingChangesBar.svelte";
 interface Props {
 	registry: SessionRegistry;
 	threadPath: string | null;
@@ -62,6 +62,18 @@ const {
 const session = $derived(registry.sessionFor(threadPath));
 const editingPairId = $derived(session?.editingPairId ?? null);
 const isEditing = $derived(editingPairId !== null);
+
+const pluginData = getData();
+const autoWritingMode = $derived(pluginData.autoWritingMode);
+
+function toggleAutoWritingMode(event: MouseEvent) {
+	event.stopPropagation();
+	const next = !pluginData.autoWritingMode;
+	pluginData.autoWritingMode = next;
+	new Notice(
+		next ? "Auto-write mode ON: note changes applied directly" : "Auto-write mode OFF: note changes require review",
+	);
+}
 
 let editorContainer: HTMLDivElement | undefined = $state();
 let attachmentInputEl: HTMLInputElement | undefined = $state();
@@ -1325,6 +1337,13 @@ async function promoteVisibleNoteToAttachment(note: VisibleNote) {
       />
       <AgentPopover {threadPath} />
       <ModelSelectButton {threadPath} />
+      <Button
+        iconId={autoWritingMode ? "zap" : "pen-tool"}
+        ariaLabel={autoWritingMode ? "Auto-write: ON (edits applied directly)" : "Auto-write: OFF (edits require review)"}
+        tooltip={autoWritingMode ? "Auto-write: ON (edits applied directly)" : "Auto-write: OFF (edits require review)"}
+        onClick={toggleAutoWritingMode}
+        styles="chat-input-icon-button clickable-icon {autoWritingMode ? 'is-active text-[--interactive-accent]' : 'text-[--text-muted]'}"
+      />
       <div class="ml-auto flex items-center gap-2">
         <!-- Always on for desktop: the ring is the only place the running
              context estimate (and the Summarize action in its popover) lives,

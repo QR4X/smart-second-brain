@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("obsidian", () => import("../__mocks__/obsidian"));
 
 const mockAddChanges = vi.fn().mockReturnValue(["mock-id"]);
+const mockAcceptChange = vi.fn().mockResolvedValue(undefined);
+const mockMarkReportedToModel = vi.fn();
 const mockIsPathAllowed = vi.fn().mockReturnValue(true);
 const mockCountOtherThreads = vi.fn().mockReturnValue(0);
 const mockShouldBlockFile = vi.fn().mockReturnValue(false);
@@ -14,6 +16,8 @@ const mockGetEntry = vi.fn().mockReturnValue(undefined);
 vi.mock("../../src/stores/pendingChangesStore.svelte", () => ({
 	getPendingChangesStore: () => ({
 		addChanges: mockAddChanges,
+		acceptChange: mockAcceptChange,
+		markReportedToModel: mockMarkReportedToModel,
 		isPathAllowed: mockIsPathAllowed,
 		countOtherThreadsPendingUpdate: mockCountOtherThreads,
 		shouldBlockFile: (...args: unknown[]) => mockShouldBlockFile(...args),
@@ -1250,6 +1254,70 @@ describe("manageNotes tool", () => {
 			expect(result).not.toContain("contains BOTH");
 			const staged = mockAddChanges.mock.calls[0][0][0];
 			expect(staged.newContent).toBe("line one\nLINE 2\nline three\n");
+		});
+	});
+
+	describe("autoWritingMode", () => {
+		it("automatically accepts changes when autoWritingMode is enabled", async () => {
+			mockGetData.mockReturnValue({
+				autoWritingMode: true,
+				getAgent: () => undefined,
+				getSelectedAgent: () => ({
+					chatModel: { provider: "test-provider" },
+					toolsConfig: { manage_notes: {} },
+				}),
+			});
+			mockResolveVaultFileDetailed.mockReturnValue({ status: "found", file: makeFile("Notes/doc.md") });
+			vi.mocked(app.vault.read).mockResolvedValue("line one\nline two\n");
+			mockAddChanges.mockReturnValue(["change-id-1"]);
+
+			const result = await tool.invoke(
+				{
+					operations: [
+						{
+							type: "update",
+							path: "Notes/doc.md",
+							edits: [{ oldText: "line two", newText: "line two updated" }],
+						},
+					],
+				},
+				THREAD_CONFIG,
+			);
+
+			expect(mockAcceptChange).toHaveBeenCalledWith("change-id-1");
+			expect(mockMarkReportedToModel).toHaveBeenCalledWith(["change-id-1"]);
+			expect(result).toContain("Applied 1 note operation(s)");
+			expect(result).toContain("auto-write mode enabled, no user review needed");
+		});
+
+		it("leaves changes pending when autoWritingMode is disabled", async () => {
+			mockGetData.mockReturnValue({
+				autoWritingMode: false,
+				getAgent: () => undefined,
+				getSelectedAgent: () => ({
+					chatModel: { provider: "test-provider" },
+					toolsConfig: { manage_notes: {} },
+				}),
+			});
+			mockResolveVaultFileDetailed.mockReturnValue({ status: "found", file: makeFile("Notes/doc.md") });
+			vi.mocked(app.vault.read).mockResolvedValue("line one\nline two\n");
+			mockAddChanges.mockReturnValue(["change-id-1"]);
+
+			const result = await tool.invoke(
+				{
+					operations: [
+						{
+							type: "update",
+							path: "Notes/doc.md",
+							edits: [{ oldText: "line two", newText: "line two updated" }],
+						},
+					],
+				},
+				THREAD_CONFIG,
+			);
+
+			expect(mockAcceptChange).not.toHaveBeenCalled();
+			expect(result).toContain("will be reviewed by the user");
 		});
 	});
 });
