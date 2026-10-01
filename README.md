@@ -10,6 +10,12 @@
 
 <br>
 
+## About this fork
+
+GitHub marks this repository as a fork because it is built on the original [Smart Second Brain](https://github.com/s2b-dev/smart-second-brain). The goal is not to publish an unchanged copy or replace the original project, but to maintain a personal variant with a small, clearly identified addition: an optional **Auto-write mode**. When enabled, the agent applies note changes immediately instead of waiting for manual approval. You can switch it on or off from the chat toolbar or General settings; it is off by default.
+
+This fork aims to carry useful upstream changes forward, but updates are not automatic. For the original project, its support, and its community, visit [s2b-dev/smart-second-brain](https://github.com/s2b-dev/smart-second-brain).
+
 Your Smart Second Brain is a **free** and **open-source** Obsidian plugin that makes your vault smarter: better search, an interactive knowledge graph, and an AI assistant that actually knows your notes.
 
 Search surfaces your notes, the graph groups them into the topics your vault is actually about, and the assistant can draw on both when answering. **Search and the graph work right away with no AI provider.** Connecting one unlocks the full agent. Runs on desktop and mobile.
