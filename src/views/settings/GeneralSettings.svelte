@@ -1,12 +1,12 @@
 <script lang="ts">
-import ManagedEntitySection from "../../components/settings/ManagedEntitySection.svelte";
 import { PrivacyListModal } from "../../components/modal/PrivacyListModal";
+import ManagedEntitySection from "../../components/settings/ManagedEntitySection.svelte";
 import ProviderItem from "../../components/settings/ProviderItem.svelte";
 import SettingGroup from "../../components/settings/SettingGroup.svelte";
 import SettingItem from "../../components/settings/SettingItem.svelte";
 import Button from "../../components/ui/Button.svelte";
-import Toggle from "../../components/ui/Toggle.svelte";
 import DocsLink from "../../components/ui/DocsLink.svelte";
+import Toggle from "../../components/ui/Toggle.svelte";
 import { getData } from "../../stores/dataStore.svelte";
 import { getPlugin } from "../../stores/state.svelte";
 import { icon } from "../../utils/utils";
@@ -72,6 +72,19 @@ function handleOpenProviderSetup() {
     <Toggle
       checked={pluginData.checkForUpdates}
       onchange={(checked) => (pluginData.checkForUpdates = checked)}
+    />
+  </SettingItem>
+</SettingGroup>
+
+<!-- Notes & Editing -->
+<SettingGroup heading="Notes & Editing">
+  <SettingItem
+    name="Auto-write mode"
+    desc="Apply note creations, edits, and deletions immediately without staging them for review. Can also be toggled directly from the chat toolbar via the bolt icon."
+  >
+    <Toggle
+      checked={pluginData.autoWritingMode}
+      onchange={(checked) => (pluginData.autoWritingMode = checked)}
     />
   </SettingItem>
 </SettingGroup>

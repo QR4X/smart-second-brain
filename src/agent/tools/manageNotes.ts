@@ -1,17 +1,17 @@
-import { type App, normalizePath, type TFile } from "obsidian";
-import { tool } from "@langchain/core/tools";
 import type { RunnableConfig } from "@langchain/core/runnables";
+import { tool } from "@langchain/core/tools";
+import { type App, type TFile, normalizePath } from "obsidian";
 import { z } from "zod";
 import { getData } from "../../stores/dataStore.svelte";
-import { DEFAULT_TOOLS_CONFIG } from "./builtInToolDefaults";
 import { getPendingChangesStore } from "../../stores/pendingChangesStore.svelte";
 import type { PendingChange } from "../../types/shared";
-import { resolveVaultFileDetailed } from "../../utils/pathResolution";
 import { memoriesDir } from "../../utils/agentPaths";
 import { getIndexableVaultFiles, isTextIndexableFile, shouldProcessVaultPath } from "../../utils/fileFiltering";
-import { normalizeVaultPath } from "../../utils/pathUtils";
+import { resolveVaultFileDetailed } from "../../utils/pathResolution";
 import { normalizeReferencePath } from "../../utils/pathResolution";
+import { normalizeVaultPath } from "../../utils/pathUtils";
 import { genUUIDv7 } from "../../utils/uuid7Validator";
+import { DEFAULT_TOOLS_CONFIG } from "./builtInToolDefaults";
 import { buildGrepMatcher } from "./grepMatcher";
 
 const editSchema = z.object({
@@ -776,16 +776,18 @@ async function stageNoteOperations(
 	const resolvedToolCallId = toolCallId ?? genUUIDv7();
 	const entryIds = store.addChanges(stagedChanges, resolvedToolCallId, threadId);
 
-	// Auto-apply changes that target the agent's memory folder: the agent governs
-	// that folder itself, so those writes shouldn't wait in the review queue. We
-	// reuse acceptChange (locking, conflict/existence checks, folder creation)
-	// rather than a parallel write path. Non-memory changes stay pending.
+	// Auto-apply changes that target the agent's memory folder (or all changes when
+	// auto-writing mode is enabled): the agent governs memory itself, and auto-writing
+	// mode lets users opt into immediate writes without a review queue. We reuse
+	// acceptChange (locking, conflict/existence checks, folder creation) rather than
+	// a parallel write path. Non-memory changes stay pending when auto-write is off.
+	const autoWriteEnabled = getData().autoWritingMode;
 	const memoryFolder = getMemoryFolder();
 	let autoAppliedCount = 0;
 	const autoApplyFailures: string[] = [];
 	for (let i = 0; i < stagedChanges.length; i++) {
 		const change = stagedChanges[i];
-		if (!isMemoryChange(change, memoryFolder)) continue;
+		if (!autoWriteEnabled && !isMemoryChange(change, memoryFolder)) continue;
 		try {
 			// Sequential await respects the store's per-file lock ordering.
 			await store.acceptChange(entryIds[i]);
@@ -808,12 +810,18 @@ async function stageNoteOperations(
 	if (stagedChanges.length === 0 && discardResults.length > 0) {
 		summary = discardSummary;
 	} else if (autoAppliedCount > 0 && stagedCount === 0 && autoApplyFailures.length === 0) {
-		summary = `Saved ${autoAppliedCount} memory note operation(s) (${summarizeOperations(stagedChanges)}) to \`${memoryFolder}/\` — applied automatically, no user review needed.`;
+		if (autoWriteEnabled) {
+			summary = `Applied ${autoAppliedCount} note operation(s) (${summarizeOperations(stagedChanges)}) automatically (auto-write mode enabled, no user review needed).`;
+		} else {
+			summary = `Saved ${autoAppliedCount} memory note operation(s) (${summarizeOperations(stagedChanges)}) to \`${memoryFolder}/\` — applied automatically, no user review needed.`;
+		}
 		if (discardSummary) summary += ` ${discardSummary}`;
 	} else {
 		summary = `Proposed ${stagedChanges.length} note operation(s) across ${seenPaths.size} path(s) (${summarizeOperations(stagedChanges)}).`;
 		if (autoAppliedCount > 0) {
-			summary += ` ${autoAppliedCount} targeting \`${memoryFolder}/\` were applied automatically (memory).`;
+			summary += autoWriteEnabled
+				? ` ${autoAppliedCount} were applied automatically (auto-write mode).`
+				: ` ${autoAppliedCount} targeting \`${memoryFolder}/\` were applied automatically (memory).`;
 		}
 		if (stagedCount > 0) {
 			summary += ` ${stagedCount} will be reviewed by the user, who will approve or reject them.`;
@@ -841,7 +849,8 @@ async function stageNoteOperations(
 		summary += ` IMPORTANT: ${paths} now contains BOTH your earlier pending edit AND this one — this proposal ADDS to the earlier one, it does not replace it. The user will see every edit together. If you meant to REPLACE your earlier edit (e.g. the user is correcting you), re-stage it with "replace_pending": true, or "discard" the file first. Do not tell the user this supersedes the earlier edit unless you did one of those.`;
 	}
 	if (autoApplyFailures.length > 0) {
-		summary += ` ${autoApplyFailures.length} memory write(s) could not be applied: ${autoApplyFailures.join("; ")}.`;
+		const failureType = autoWriteEnabled ? "write(s)" : "memory write(s)";
+		summary += ` ${autoApplyFailures.length} ${failureType} could not be applied: ${autoApplyFailures.join("; ")}.`;
 	}
 	if (crossThreadPaths.size > 0) {
 		const paths = [...crossThreadPaths].map((p) => `"${p}"`).join(", ");

@@ -551,6 +551,12 @@ export interface PluginData {
 	thinkingProcessExpanded: boolean;
 
 	/**
+	 * When enabled, note modifications and creations by agent tools (e.g. manage_notes)
+	 * are applied immediately without staging for user review.
+	 */
+	autoWritingMode: boolean;
+
+	/**
 	 * Whether to show the running-agent indicator in the status bar. When enabled,
 	 * each streaming chat surfaces a clickable chip that jumps to that chat.
 	 * Persisted; default enabled.

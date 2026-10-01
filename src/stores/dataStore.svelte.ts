@@ -1,4 +1,5 @@
 import { Notice, normalizePath } from "obsidian";
+import { getSecret, listSecrets, removeSecret, setSecret } from "../lib/secretStorage";
 import {
 	createEmptyPrivacyFilter,
 	matchesPrivacyMembershipDraftPath,
@@ -6,21 +7,14 @@ import {
 	resolveViewFilter,
 	rewriteViewFilterForRename,
 } from "../lib/views";
-import { getSecret, listSecrets, removeSecret, setSecret } from "../lib/secretStorage";
-import { isAgentFilePath } from "../utils/fileFiltering";
-import { sanitizeAgentFileName } from "../utils/agentPaths";
-import { installAgentPathSource } from "../utils/agentPathSource";
-import { DEFAULT_AGENT_ID, createDefaultAgent, createDefaultAgentConfig, normalizeAgents } from "./agentDefaults";
-import { CURRENT_SCHEMA_VERSION, runMigrations } from "./dataMigrations";
-import { computeStaleGuidance } from "./staleGuidance";
 import type SecondBrainPlugin from "../main";
 import type {
 	AgentConfig,
 	AgentSkillState,
 	AgentsConfig,
 	BuiltInToolId,
-	DefaultEmbedModel,
 	ChatOpenLocation,
+	DefaultEmbedModel,
 	DiffViewMode,
 	EmbeddingIndexConfig,
 	MCPServerConfig,
@@ -33,12 +27,18 @@ import type {
 	ToolConfig,
 } from "../types/plugin";
 import { RECENT_NOTE_WINDOW_MS } from "../types/plugin";
-import { getDefaultEmbeddingBatchSize, normalizeEmbeddingBatchSize } from "../vectorstore/batchSize";
+import { installAgentPathSource } from "../utils/agentPathSource";
+import { sanitizeAgentFileName } from "../utils/agentPaths";
+import { isAgentFilePath } from "../utils/fileFiltering";
 import { type UUIDv7, genUUIDv7 } from "../utils/uuid7Validator";
+import { getDefaultEmbeddingBatchSize, normalizeEmbeddingBatchSize } from "../vectorstore/batchSize";
+import { DEFAULT_AGENT_ID, createDefaultAgent, createDefaultAgentConfig, normalizeAgents } from "./agentDefaults";
+import { CURRENT_SCHEMA_VERSION, runMigrations } from "./dataMigrations";
+import { computeStaleGuidance } from "./staleGuidance";
 
-import { type SmartGraphSettings, DEFAULT_SMART_GRAPH_SETTINGS } from "../types/graph";
-import { Logger, applyVerboseLogging } from "../utils/logging";
+import { DEFAULT_SMART_GRAPH_SETTINGS, type SmartGraphSettings } from "../types/graph";
 import { extractErrorMessage } from "../utils/errorMessage";
+import { Logger, applyVerboseLogging } from "../utils/logging";
 
 // Provider system types
 import {
@@ -237,6 +237,7 @@ export const DEFAULT_SETTINGS: PluginData = {
 	lastSeenVersion: null,
 	dismissedRecommendations: [],
 	thinkingProcessExpanded: true,
+	autoWritingMode: false,
 	showActiveAgentsInStatusBar: true,
 	overrideMobileNavbarSearch: false,
 	suppressIntegrationPrivacyWarning: false,
@@ -1522,6 +1523,14 @@ export class PluginDataStore {
 	}
 	set diffViewMode(val: DiffViewMode) {
 		this.#data.diffViewMode = val;
+		void this.saveSettings();
+	}
+
+	get autoWritingMode(): boolean {
+		return this.#data.autoWritingMode ?? false;
+	}
+	set autoWritingMode(val: boolean) {
+		this.#data.autoWritingMode = val;
 		void this.saveSettings();
 	}
 
